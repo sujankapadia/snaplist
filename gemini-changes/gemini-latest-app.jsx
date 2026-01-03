@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
+import { 
+  getAuth, 
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
@@ -28,15 +28,15 @@ import {
   getDownloadURL, 
   deleteObject 
 } from 'firebase/storage';
-import {
-  Mic,
-  MicOff,
-  Plus,
-  CheckCircle,
-  Circle,
-  Trash2,
-  Clock,
-  Tag,
+import { 
+  Mic, 
+  MicOff, 
+  Plus, 
+  CheckCircle, 
+  Circle, 
+  Trash2, 
+  Clock, 
+  Tag, 
   AlertTriangle,
   Send,
   Loader2,
@@ -55,23 +55,17 @@ import {
   Paperclip,
   Image as ImageIcon,
   ExternalLink,
+  LogIn,
   LogOut
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
-
+const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'snap-list-ai';
 
 // --- Helpers ---
 const generateCategoryHue = () => {
@@ -106,7 +100,6 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
   const [editingTask, setEditingTask] = useState(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -170,13 +163,13 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    const catQuery = query(collection(db, 'users', user.uid, 'categories'));
+    const catQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'categories'));
     const unsubCats = onSnapshot(catQuery, async (snapshot) => {
       if (snapshot.empty) {
         const batch = writeBatch(db);
         SEED_CATEGORIES.forEach(cat => {
           const hue = generateCategoryHue();
-          const docRef = doc(collection(db, 'users', user.uid, 'categories'));
+          const docRef = doc(collection(db, 'artifacts', appId, 'users', user.uid, 'categories'));
           batch.set(docRef, { ...cat, hue, createdAt: serverTimestamp() });
         });
         await batch.commit();
@@ -185,7 +178,7 @@ export default function App() {
       }
     });
 
-    const taskQuery = query(collection(db, 'users', user.uid, 'tasks'));
+    const taskQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'));
     const unsubTasks = onSnapshot(taskQuery, (snapshot) => {
       setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -240,11 +233,11 @@ export default function App() {
   const processWithAI = async (text) => {
     if (!text || text.trim().length < 2) return;
     setIsProcessing(true);
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+    const apiKey = ""; 
     const nowFull = new Date().toString(); 
     const categoryContext = categories.map(c => `- ${c.name}: ${c.description || 'No description'}`).join('\n');
 
-    const systemPrompt = `Analyze task: "${text}". Time Context: ${nowFull}. Categories:\n${categoryContext}\nInstructions: 1. Match category. 2. Set urgency to EXACTLY one of: "High", "Medium", or "Low" (string values only). 3. Default time 9AM local if not specified. Return JSON only: {title: string, category: string, isNewCategory: boolean, urgency: "High"|"Medium"|"Low", dueDate: string (UTC ISO), notes: string}.`;
+    const systemPrompt = `Analyze task: "${text}". Time Context: ${nowFull}. Categories:\n${categoryContext}\nInstructions: 1. Match category. 2. Urgency. 3. Default time 9AM local if not specified. Return JSON only: {title, category, isNewCategory, urgency, dueDate (UTC ISO), notes}.`;
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -257,7 +250,7 @@ export default function App() {
       });
       const data = await response.json();
       const result = JSON.parse(data.candidates[0].content.parts[0].text);
-      await addDoc(collection(db, 'users', user.uid, 'tasks'), { ...result, completed: false, createdAt: serverTimestamp(), attachments: [] });
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks'), { ...result, completed: false, createdAt: serverTimestamp(), attachments: [] });
       setInputText('');
     } catch (err) { console.error(err); } 
     finally { setIsProcessing(false); }
@@ -266,17 +259,16 @@ export default function App() {
   // --- Attachment Handlers ---
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !editingTask) return;
+    if (!file || !editingTask || !user) return;
 
     setUploadingFile(true);
     const timestamp = Date.now();
     const fileName = `${timestamp}_${file.name}`;
-    const storagePath = `users/${user.uid}/tasks/${editingTask.id}/attachments/${fileName}`;
+    const storagePath = `artifacts/${appId}/users/${user.uid}/tasks/${editingTask.id}/attachments/${fileName}`;
     const storageRef = ref(storage, storagePath);
 
     try {
       const uploadTask = uploadBytesResumable(storageRef, file);
-      
       uploadTask.on('state_changed', null, (error) => {
         console.error("Upload Error:", error);
         setUploadingFile(false);
@@ -290,54 +282,30 @@ export default function App() {
           storagePath,
           createdAt: new Date().toISOString()
         };
-
-        const taskRef = doc(db, 'users', user.uid, 'tasks', editingTask.id);
-        await updateDoc(taskRef, {
-          attachments: arrayUnion(attachmentObj)
-        });
-        
-        // Update local modal state
-        setEditingTask(prev => ({
-          ...prev,
-          attachments: [...(prev.attachments || []), attachmentObj]
-        }));
+        const taskRef = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id);
+        await updateDoc(taskRef, { attachments: arrayUnion(attachmentObj) });
+        setEditingTask(prev => ({ ...prev, attachments: [...(prev.attachments || []), attachmentObj] }));
         setUploadingFile(false);
       });
-    } catch (err) {
-      console.error(err);
-      setUploadingFile(false);
-    }
+    } catch (err) { console.error(err); setUploadingFile(false); }
   };
 
   const removeAttachment = async (attachment) => {
-    if (!editingTask) return;
-    
+    if (!editingTask || !user) return;
     try {
-      // 1. Delete from Storage
       const storageRef = ref(storage, attachment.storagePath);
       await deleteObject(storageRef);
-
-      // 2. Delete from Firestore
-      const taskRef = doc(db, 'users', user.uid, 'tasks', editingTask.id);
-      await updateDoc(taskRef, {
-        attachments: arrayRemove(attachment)
-      });
-
-      // Update local modal state
-      setEditingTask(prev => ({
-        ...prev,
-        attachments: prev.attachments.filter(a => a.id !== attachment.id)
-      }));
-    } catch (err) {
-      console.error("Delete Error:", err);
-    }
+      const taskRef = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id);
+      await updateDoc(taskRef, { attachments: arrayRemove(attachment) });
+      setEditingTask(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== attachment.id) }));
+    } catch (err) { console.error("Delete Error:", err); }
   };
 
   // --- Speech & Handlers ---
   const toggleListening = () => {
     if (isProcessing) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return setErrorMessage("Speech not supported.");
+    if (!SpeechRecognition) return;
     if (isListening) { recognitionRef.current?.stop(); return; }
     recognitionRef.current = new SpeechRecognition();
     recognitionRef.current.onstart = () => setIsListening(true);
@@ -375,8 +343,8 @@ export default function App() {
           <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-white text-4xl font-black mx-auto shadow-xl mb-6">S</div>
           <h1 className="text-3xl font-black text-slate-800 dark:text-white mb-2">SnapList AI</h1>
           <p className="text-slate-500 dark:text-slate-400 mb-10 leading-relaxed font-medium">Capture thoughts, categorize with AI, and master your day in seconds.</p>
-
-          <button
+          
+          <button 
             onClick={handleLogin}
             className="w-full flex items-center justify-center gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm active:scale-95 group"
           >
@@ -388,7 +356,7 @@ export default function App() {
             </svg>
             <span className="font-bold text-slate-700 dark:text-slate-100 group-hover:translate-x-1 transition-transform">Sign in with Google</span>
           </button>
-
+          
           <div className="mt-8 flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
             <span className="w-8 h-px bg-slate-200 dark:bg-slate-800"></span>
             Private & Secure
@@ -409,16 +377,8 @@ export default function App() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowCategoryManager(true)} className="flex items-center gap-2 p-1 pl-1 pr-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
-                {user.email?.[0]?.toUpperCase() || 'U'}
-              </div>
-            )}
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
-              {user.displayName ? user.displayName.split(' ')[0] : user.email?.split('@')[0] || 'User'}
-            </span>
+            <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" />
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{user.displayName.split(' ')[0]}</span>
           </button>
           <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
         </div>
@@ -457,17 +417,17 @@ export default function App() {
         {filteredAndSortedTasks.length === 0 && (
           <div className="py-20 text-center opacity-40 italic flex flex-col items-center">
             <Filter size={48} className="mb-4" />
-            <p>No {statusFilter} tasks matches.</p>
+            <p>No {statusFilter} tasks found.</p>
           </div>
         )}
         {filteredAndSortedTasks.map((task) => (
           <div 
             key={task.id}
             onClick={() => setEditingTask(task)}
-            className={`group flex items-start gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all active:scale-[0.98] ${task.completed ? 'opacity-60 bg-slate-50 dark:bg-slate-950' : ''}`}
+            className={`group flex items-start gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-all active:scale-[0.98] ${task.completed ? 'opacity-60 bg-slate-50 dark:bg-slate-950' : ''}`}
           >
-            <button
-              onClick={(e) => { e.stopPropagation(); updateDoc(doc(db, 'users', user.uid, 'tasks', task.id), { completed: !task.completed }); }}
+            <button 
+              onClick={(e) => { e.stopPropagation(); updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', task.id), { completed: !task.completed }); }}
               className={`mt-0.5 flex-shrink-0 ${task.completed ? 'text-green-500' : 'text-slate-300 dark:text-slate-700'}`}
             >
               {task.completed ? <CheckCircle size={22} /> : <Circle size={22} />}
@@ -487,7 +447,7 @@ export default function App() {
                     <Clock size={10} /> {new Date(task.dueDate).toLocaleDateString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}
                   </span>
                 )}
-                <span className={`text-[10px] font-bold uppercase ${URGENCY_COLORS[task.urgency] || 'text-slate-400 dark:text-slate-500'}`}>
+                <span className={`text-[10px] font-bold uppercase ${URGENCY_COLORS[task.urgency]}`}>
                   <AlertTriangle size={10} className="inline mr-1" />{task.urgency}
                 </span>
               </div>
@@ -529,11 +489,11 @@ export default function App() {
             <div className="p-6 space-y-6 overflow-y-auto no-scrollbar">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Title</label>
-                <input
+                <input 
                   className="w-full text-xl font-bold bg-transparent border-b border-slate-200 dark:border-slate-800 outline-none pb-2 text-slate-800 dark:text-white"
                   value={editingTask.title}
                   onChange={(e) => setEditingTask({...editingTask, title: e.target.value})}
-                  onBlur={() => updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), { title: editingTask.title })}
+                  onBlur={() => updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id), { title: editingTask.title })}
                 />
               </div>
 
@@ -546,7 +506,7 @@ export default function App() {
                     onChange={(e) => {
                       const val = e.target.value;
                       setEditingTask({...editingTask, category: val});
-                      updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), { category: val, isNewCategory: false });
+                      updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id), { category: val, isNewCategory: false });
                     }}
                   >
                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -560,7 +520,7 @@ export default function App() {
                     onChange={(e) => {
                       const val = e.target.value;
                       setEditingTask({...editingTask, urgency: val});
-                      updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), { urgency: val });
+                      updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id), { urgency: val });
                     }}
                   >
                     {['High', 'Medium', 'Low'].map(u => <option key={u} value={u}>{u}</option>)}
@@ -577,12 +537,11 @@ export default function App() {
                   onChange={(e) => {
                     const utcVal = e.target.value ? new Date(e.target.value).toISOString() : null;
                     setEditingTask({...editingTask, dueDate: utcVal});
-                    updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), { dueDate: utcVal });
+                    updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id), { dueDate: utcVal });
                   }}
                 />
               </div>
 
-              {/* Attachments Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1">
@@ -590,7 +549,7 @@ export default function App() {
                   </label>
                   <label className={`cursor-pointer text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:underline ${uploadingFile ? 'opacity-50 pointer-events-none' : ''}`}>
                     <Plus size={14}/> Add File
-                    <input type="file" accept="image/*,.pdf,.doc,.docx" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
                   </label>
                 </div>
 
@@ -631,18 +590,18 @@ export default function App() {
 
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><FileText size={12}/> Notes</label>
-                <textarea
+                <textarea 
                   className="w-full bg-slate-100 dark:bg-slate-800 p-4 rounded-xl text-sm min-h-[120px] outline-none ring-indigo-500/20 focus:ring-2 text-slate-800 dark:text-white"
                   value={editingTask.notes || ''}
                   onChange={(e) => setEditingTask({...editingTask, notes: e.target.value})}
-                  onBlur={() => updateDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id), { notes: editingTask.notes })}
+                  onBlur={() => updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id), { notes: editingTask.notes })}
                   placeholder="Describe task details..."
                 />
               </div>
             </div>
 
             <div className="p-4 bg-slate-50 dark:bg-slate-900/80 border-t dark:border-slate-800 flex gap-3">
-              <button onClick={() => { deleteDoc(doc(db, 'users', user.uid, 'tasks', editingTask.id)); setEditingTask(null); }} className="flex-1 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl font-bold text-sm transition-colors">Delete</button>
+              <button onClick={() => { deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', editingTask.id)); setEditingTask(null); }} className="flex-1 py-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl font-bold text-sm transition-colors">Delete</button>
               <button onClick={() => setEditingTask(null)} className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-500/30 active:scale-95 transition-all">Done</button>
             </div>
           </div>
@@ -654,7 +613,7 @@ export default function App() {
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowSortMenu(false)}>
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-t-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs">Sort Tasks By</h3>
+              <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs text-center">Sort Tasks By</h3>
               <button onClick={() => setShowSortMenu(false)} className="text-slate-400 p-1"><X size={20}/></button>
             </div>
             {[
@@ -669,7 +628,7 @@ export default function App() {
                 className={`w-full flex items-center gap-3 p-4 rounded-2xl transition-all ${sortMethod === m.id ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 ring-1 ring-indigo-200' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <m.icon size={20} />
-                <span className="font-bold">{m.label}</span>
+                <span className="font-bold text-sm">{m.label}</span>
                 {sortMethod === m.id && <Check size={20} className="ml-auto" />}
               </button>
             ))}
@@ -682,44 +641,36 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="p-6 border-b dark:border-slate-800 flex items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-12 h-12 rounded-full border-2 border-indigo-500" />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xl font-bold border-2 border-indigo-500">
-                  {user.email?.[0]?.toUpperCase() || 'U'}
-                </div>
-              )}
-              <div className="flex-1">
-                <h2 className="font-black text-slate-800 dark:text-white">
-                  {user.displayName || user.email?.split('@')[0] || 'User'}
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">{user.email || 'No email'}</p>
-              </div>
-              <button onClick={handleLogout} className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 transition-colors" title="Sign Out">
-                <LogOut size={20}/>
-              </button>
+               <img src={user.photoURL} alt="User" className="w-12 h-12 rounded-full border-2 border-indigo-500" />
+               <div className="flex-1">
+                 <h2 className="font-black text-slate-800 dark:text-white">{user.displayName}</h2>
+                 <p className="text-xs text-slate-500 font-medium">{user.email}</p>
+               </div>
+               <button onClick={handleLogout} className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 transition-colors" title="Sign Out">
+                 <LogOut size={20}/>
+               </button>
             </div>
-
+            
             <div className="p-4 overflow-y-auto space-y-4 no-scrollbar">
               <div className="flex items-center justify-between px-2">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">My Categories</h3>
-                <button onClick={() => addDoc(collection(db, 'users', user.uid, 'categories'), { name: "New Category", description: "", hue: generateCategoryHue(), createdAt: serverTimestamp() })} className="text-xs font-bold text-indigo-600 flex items-center gap-1"><Plus size={14}/> Add New</button>
+                <button onClick={() => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'categories'), { name: "New Category", description: "", hue: generateCategoryHue(), createdAt: serverTimestamp() })} className="text-xs font-bold text-indigo-600 flex items-center gap-1"><Plus size={14}/> Add New</button>
               </div>
               <div className="space-y-3">
                 {categories.map(cat => (
-                  <div key={cat.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border dark:border-slate-800 shadow-sm">
+                  <div key={cat.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border dark:border-slate-800">
                     <div className="flex items-center justify-between mb-2">
-                      <span style={getCategoryStyles(cat.name)} className="px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm">
+                      <span style={getCategoryStyles(cat.name)} className="px-3 py-1 rounded-full text-[10px] font-bold uppercase shadow-sm">
                         {cat.name}
                       </span>
-                      <button onClick={() => deleteDoc(doc(db, 'users', user.uid, 'categories', cat.id))} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                      <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'categories', cat.id))} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                     </div>
                     <textarea 
-                      className="w-full bg-transparent text-sm text-slate-600 dark:text-slate-400 italic outline-none focus:text-slate-900 dark:focus:text-white border-none resize-none h-12"
+                      className="w-full bg-transparent text-sm text-slate-600 dark:text-slate-400 italic outline-none border-none resize-none h-12"
                       placeholder="Add description to help AI match..."
                       value={cat.description || ''}
                       onChange={(e) => setCategories(categories.map(c => c.id === cat.id ? {...c, description: e.target.value} : c))}
-                      onBlur={(e) => updateDoc(doc(db, 'users', user.uid, 'categories', cat.id), { description: e.target.value })}
+                      onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'categories', cat.id), { description: e.target.value })}
                     />
                   </div>
                 ))}
