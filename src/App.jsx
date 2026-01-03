@@ -149,6 +149,9 @@ export default function App() {
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'  // Always show account picker
+    });
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
