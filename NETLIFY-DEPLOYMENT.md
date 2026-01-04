@@ -89,6 +89,7 @@ If you own a custom domain (e.g., `snaplist.yourdomain.com`):
 ## Automatic Deployments
 
 Once set up, Netlify will automatically:
+
 - Deploy every time you push to the `main` branch
 - Show deploy previews for pull requests
 - Notify you of build failures
@@ -96,6 +97,7 @@ Once set up, Netlify will automatically:
 ## Build Output
 
 When Netlify builds your app, it runs:
+
 ```bash
 npm install
 npm run build
@@ -106,21 +108,25 @@ This creates the production-optimized files in the `dist/` directory, which Netl
 ## Troubleshooting
 
 ### Build Fails
+
 - Check **"Deploy log"** in Netlify dashboard
 - Ensure all environment variables are set correctly
 - Verify `package.json` scripts are correct
 
 ### Google Sign-In Fails
+
 - Verify Netlify domain is in Firebase authorized domains
 - Check browser console for error messages
 - Ensure environment variables include `VITE_FIREBASE_AUTH_DOMAIN`
 
 ### App Loads But Features Don't Work
+
 - Check browser console for API errors
 - Verify Gemini API key is set correctly
 - Check Firebase rules allow authenticated users
 
 ### Voice Input Doesn't Work
+
 - Verify you're accessing via HTTPS (not HTTP)
 - Check browser permissions for microphone
 - Test on different browsers (Safari, Chrome)
@@ -128,6 +134,7 @@ This creates the production-optimized files in the `dist/` directory, which Netl
 ## Monitoring
 
 Netlify provides:
+
 - **Analytics**: Track visitors and page views
 - **Deploy notifications**: Email alerts for build status
 - **Logs**: View deploy logs and function logs
@@ -135,6 +142,7 @@ Netlify provides:
 ## Cost
 
 **Free tier includes:**
+
 - 100GB bandwidth/month
 - 300 build minutes/month
 - Automatic HTTPS
@@ -154,6 +162,7 @@ This is more than enough for a personal task manager app!
 ## Rollback
 
 If a deployment breaks something:
+
 1. Go to **"Deploys"** tab in Netlify
 2. Find a working previous deploy
 3. Click **"..."** → **"Publish deploy"**

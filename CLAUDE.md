@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Migration Status & Critical Issues
 
 ### Current State
+
 - Single-file React application (`App.jsx`) with all components inline
 - Uses **sandbox-specific Firebase paths**: `collection(db, 'artifacts', appId, 'users', user.uid, 'tasks')`
 - Missing functions that are called but not defined:
@@ -18,7 +19,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - No build tooling or project structure yet established
 
 ### Required for Local Development
+
 The app needs full project initialization per `local-development-change-suggestions.md`:
+
 1. Vite + React project scaffolding (`package.json`, `vite.config.js`, etc.)
 2. Tailwind CSS configuration (`tailwind.config.js`, `postcss.config.js`, `index.css`)
 3. Environment variables (`.env`) for Firebase config and Gemini API key
@@ -28,6 +31,7 @@ The app needs full project initialization per `local-development-change-suggesti
 ## Architecture Overview
 
 ### Tech Stack
+
 - **Frontend**: React with Tailwind CSS (mobile-first design)
 - **Icons**: Lucide React
 - **Backend**: Firebase (Anonymous Auth + Firestore)
@@ -35,6 +39,7 @@ The app needs full project initialization per `local-development-change-suggesti
 - **Voice**: Web Speech API (browser native)
 
 ### Required Dependencies
+
 ```json
 {
   "dependencies": {
@@ -54,6 +59,7 @@ The app needs full project initialization per `local-development-change-suggesti
 ```
 
 ### Data Model (Firestore)
+
 ```
 /users/{userId}/tasks
   - title: string
@@ -101,13 +107,17 @@ The app needs full project initialization per `local-development-change-suggesti
 - **Theme**: Persisted in localStorage, respects system preference by default
 
 ### Dynamic Color System
+
 Categories use HSL colors for accessibility:
+
 - `getCategoryStyles()` generates background/text colors based on theme
 - Dark mode: `hsl(hue, 75%, 20%)` background, `hsl(hue, 75%, 85%)` text
 - Light mode: `hsl(hue, 75%, 92%)` background, `hsl(hue, 75%, 30%)` text
 
 ### Urgency System
+
 Urgency levels are defined in `URGENCY_LEVELS` and `URGENCY_COLORS` constants:
+
 - **High**: Priority 3, Red text (`text-red-500 dark:text-red-400`)
 - **Medium**: Priority 2, Orange text (`text-orange-500 dark:text-orange-400`)
 - **Low**: Priority 1, Gray text (`text-gray-400 dark:text-gray-500`)
@@ -115,12 +125,14 @@ Urgency levels are defined in `URGENCY_LEVELS` and `URGENCY_COLORS` constants:
 ### UI Component Patterns
 
 **Mobile-First Design Principles:**
+
 - Horizontal scrollable chip filters for categories/dates (no vertical scrollbar)
 - Bottom sheet modals for sort menu and task details
 - Sticky header and filter bar for persistent access
 - Floating capture bar at bottom (gradient overlay to prevent content clash)
 
 **Key UI Components:**
+
 - **Task Cards** (`App.jsx:367-405`): Tap to edit, checkbox toggle, category badge, urgency indicator
 - **Floating Capture Bar** (`App.jsx:408-426`): Text input + voice button, fixed bottom positioning
 - **Sort Menu Bottom Sheet** (`App.jsx:428-454`): Slide-up modal with 4 sort options
@@ -131,12 +143,14 @@ Urgency levels are defined in `URGENCY_LEVELS` and `URGENCY_COLORS` constants:
 ## Firebase Configuration Notes
 
 When migrating to local development, Firebase initialization must change from:
+
 ```javascript
 const firebaseConfig = JSON.parse(__firebase_config); // Sandbox global
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'snap-list-ai'; // Sandbox global
 ```
 
 To:
+
 ```javascript
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -144,19 +158,22 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 ```
 
 All Firestore paths must be updated to remove the `artifacts/${appId}` prefix.
 
 ### Gemini API Configuration
+
 The API key is currently empty at line 239. For local development, add to `.env`:
+
 ```
 VITE_GEMINI_API_KEY=your_google_ai_studio_key
 ```
 
 Then update App.jsx:
+
 ```javascript
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 ```
@@ -168,6 +185,7 @@ Get API key from: https://aistudio.google.com/ (generous free tier for `gemini-2
 Two critical functions are called but not implemented in App.jsx:
 
 1. **`acceptSuggestedCategory(task)`** - Should:
+
    - Create new category in Firestore with task's category name
    - Generate random hue from `generateCategoryHue()`
    - Update task to set `isNewCategory: false`
@@ -179,6 +197,7 @@ Two critical functions are called but not implemented in App.jsx:
 ## Firestore Security Rules
 
 Required rules (set in Firebase Console):
+
 ```javascript
 rules_version = '2';
 service cloud.firestore {
@@ -199,6 +218,7 @@ service cloud.firestore {
 ## Future Roadmap (Not Yet Implemented)
 
 Per `project-overview.md`, planned features include:
+
 - Push notifications via Firebase Cloud Messaging
 - Configurable reminder intervals (10m, 1h before due date)
 - Cloud Functions for deadline monitoring
