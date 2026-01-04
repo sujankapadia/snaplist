@@ -12,3 +12,58 @@
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+/* Sonner Toast Customization - Light Mode */
+[data-sonner-toaster] {
+  --normal-bg: white;
+  --normal-border: rgb(226 232 240); /* slate-200 */
+  --normal-text: rgb(15 23 42); /* slate-900 */
+
+  --success-bg: rgb(240 253 244); /* green-50 */
+  --success-border: rgb(134 239 172); /* green-300 */
+  --success-text: rgb(22 101 52); /* green-800 */
+
+  --error-bg: rgb(254 242 242); /* red-50 */
+  --error-border: rgb(252 165 165); /* red-300 */
+  --error-text: rgb(153 27 27); /* red-900 */
+
+  --warning-bg: rgb(254 252 232); /* yellow-50 */
+  --warning-border: rgb(253 224 71); /* yellow-300 */
+  --warning-text: rgb(133 77 14); /* yellow-900 */
+
+  --border-radius: 1rem; /* Match app's rounded-xl */
+}
+
+/* Sonner Toast Customization - Dark Mode */
+.dark [data-sonner-toaster] {
+  --normal-bg: rgb(15 23 42); /* slate-900 */
+  --normal-border: rgb(51 65 85); /* slate-700 */
+  --normal-text: rgb(248 250 252); /* slate-50 */
+
+  --success-bg: rgb(20 83 45); /* green-900/30 blend */
+  --success-border: rgb(34 197 94); /* green-500 */
+  --success-text: rgb(187 247 208); /* green-200 */
+
+  --error-bg: rgb(127 29 29); /* red-900/30 blend */
+  --error-border: rgb(248 113 113); /* red-400 */
+  --error-text: rgb(254 202 202); /* red-200 */
+
+  --warning-bg: rgb(120 53 15); /* orange-900/30 blend */
+  --warning-border: rgb(251 146 60); /* orange-400 */
+  --warning-text: rgb(254 215 170); /* orange-200 */
+}
+
+/* Custom toast styling */
+[data-sonner-toast] {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.dark [data-sonner-toast] {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.3),
+    0 4px 6px -4px rgba(0, 0, 0, 0.2);
+}

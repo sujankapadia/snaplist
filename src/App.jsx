@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { toast } from 'sonner';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
@@ -125,6 +126,13 @@ export default function App() {
   });
 
   const recognitionRef = useRef(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  // --- Speech Detection Effect ---
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setSpeechSupported(!!SpeechRecognition);
+  }, []);
 
   // --- Theme Effect ---
   useEffect(() => {
@@ -155,6 +163,7 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Login failed:', error);
+      toast.error('Failed to sign in. Please try again.');
     }
   };
 
@@ -165,6 +174,7 @@ export default function App() {
       setShowCategoryManager(false);
     } catch (error) {
       console.error('Logout failed:', error);
+      toast.error('Failed to sign out. Please try again.');
     }
   };
 
@@ -282,6 +292,7 @@ export default function App() {
       setInputText('');
     } catch (err) {
       console.error(err);
+      toast.error('Failed to process task with AI. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -306,6 +317,7 @@ export default function App() {
         null,
         (error) => {
           console.error('Upload Error:', error);
+          toast.error('Failed to upload file. Please try again.');
           setUploadingFile(false);
         },
         async () => {
@@ -334,6 +346,7 @@ export default function App() {
       );
     } catch (err) {
       console.error(err);
+      toast.error('Failed to upload file. Please try again.');
       setUploadingFile(false);
     }
   };
@@ -359,6 +372,7 @@ export default function App() {
       }));
     } catch (err) {
       console.error('Delete Error:', err);
+      toast.error('Failed to delete attachment. Please try again.');
     }
   };
 
@@ -656,14 +670,16 @@ export default function App() {
               {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
             </button>
           </form>
-          <button
-            onClick={toggleListening}
-            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl text-white active:scale-90 transition-all ${
-              isListening ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 shadow-indigo-500/30'
-            }`}
-          >
-            {isListening ? <MicOff size={24} /> : <Mic size={24} />}
-          </button>
+          {speechSupported && (
+            <button
+              onClick={toggleListening}
+              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl text-white active:scale-90 transition-all ${
+                isListening ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 shadow-indigo-500/30'
+              }`}
+            >
+              {isListening ? <MicOff size={24} /> : <Mic size={24} />}
+            </button>
+          )}
         </div>
       </div>
 
