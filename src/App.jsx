@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { toast } from 'sonner';
 import { initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   getAuth,
   onAuthStateChanged,
@@ -69,6 +71,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Initialize App Check (protection against abuse)
+const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+if (recaptchaSiteKey && recaptchaSiteKey !== 'your_recaptcha_site_key_here') {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  console.log('✅ Firebase App Check initialized');
+} else {
+  console.warn('⚠️ App Check not initialized - missing reCAPTCHA site key in .env');
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
@@ -125,6 +140,13 @@ export default function App() {
   });
 
   const recognitionRef = useRef(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  // --- Speech Detection Effect ---
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setSpeechSupported(!!SpeechRecognition);
+  }, []);
 
   // --- Theme Effect ---
   useEffect(() => {
@@ -155,6 +177,7 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Login failed:', error);
+      toast.error('Failed to sign in. Please try again.');
     }
   };
 
@@ -165,6 +188,7 @@ export default function App() {
       setShowCategoryManager(false);
     } catch (error) {
       console.error('Logout failed:', error);
+      toast.error('Failed to sign out. Please try again.');
     }
   };
 
@@ -282,6 +306,7 @@ export default function App() {
       setInputText('');
     } catch (err) {
       console.error(err);
+      toast.error('Failed to process task with AI. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -306,6 +331,7 @@ export default function App() {
         null,
         (error) => {
           console.error('Upload Error:', error);
+          toast.error('Failed to upload file. Please try again.');
           setUploadingFile(false);
         },
         async () => {
@@ -334,6 +360,7 @@ export default function App() {
       );
     } catch (err) {
       console.error(err);
+      toast.error('Failed to upload file. Please try again.');
       setUploadingFile(false);
     }
   };
@@ -359,6 +386,7 @@ export default function App() {
       }));
     } catch (err) {
       console.error('Delete Error:', err);
+      toast.error('Failed to delete attachment. Please try again.');
     }
   };
 
@@ -469,7 +497,12 @@ export default function App() {
             className="flex items-center gap-2 p-1 pl-1 pr-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
           >
             {user.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-6 h-6 rounded-full" />
+              <img
+                src={user.photoURL}
+                alt="Profile"
+                className="w-6 h-6 rounded-full"
+                crossOrigin="anonymous"
+              />
             ) : (
               <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
                 {user.email?.[0]?.toUpperCase() || 'U'}
@@ -656,14 +689,16 @@ export default function App() {
               {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
             </button>
           </form>
-          <button
-            onClick={toggleListening}
-            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl text-white active:scale-90 transition-all ${
-              isListening ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 shadow-indigo-500/30'
-            }`}
-          >
-            {isListening ? <MicOff size={24} /> : <Mic size={24} />}
-          </button>
+          {speechSupported && (
+            <button
+              onClick={toggleListening}
+              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl text-white active:scale-90 transition-all ${
+                isListening ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 shadow-indigo-500/30'
+              }`}
+            >
+              {isListening ? <MicOff size={24} /> : <Mic size={24} />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -936,6 +971,7 @@ export default function App() {
                   src={user.photoURL}
                   alt="User"
                   className="w-12 h-12 rounded-full border-2 border-indigo-500"
+                  crossOrigin="anonymous"
                 />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xl font-bold border-2 border-indigo-500">
