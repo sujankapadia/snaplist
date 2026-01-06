@@ -1,0 +1,6 @@
+# Gitleaks ignore file for educational documentation examples
+# This file contains a single educational example showing an attack scenario
+# The token is obviously fake and used for demonstration purposes only
+
+# Firebase Security Model Guide - Attack scenario example with fake token
+FIREBASE-SECURITY-MODEL-GUIDE.md:curl-auth-header:452
