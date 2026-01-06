@@ -26,8 +26,8 @@ Blocks force push commands to prevent accidental history overwrites.
 
 Add to your global Claude Code settings:
 
-1. Open Claude Code settings (Cmd+, or Ctrl+,)
-2. Search for "hooks"
+1. Run `/config` in Claude Code to open the settings interface, or
+2. Directly edit `~/.claude/settings.json`
 3. Add the following JSON configuration:
 
 ```json
@@ -57,7 +57,7 @@ Add to your global Claude Code settings:
 
 ### Option 2: Project-Specific Configuration
 
-Add to your project's `.claude/settings.json`:
+Add to your project's `.claude/settings.json` (this file is checked into source control and shared with your team):
 
 ```json
 {
@@ -77,7 +77,15 @@ Add to your project's `.claude/settings.json`:
 }
 ```
 
+**Note:** For personal project overrides (not checked in), use `.claude/settings.local.json` instead. Settings hierarchy: local > project > global.
+
 ## Testing
+
+### Verify Hook Registration
+
+Run `/hooks` in Claude Code to verify the hook is registered and active.
+
+### Run Test Script
 
 Run the test script to verify the hook works:
 
