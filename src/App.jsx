@@ -58,6 +58,8 @@ import {
   Image as ImageIcon,
   ExternalLink,
   LogOut,
+  Volume2,
+  Square,
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -142,6 +144,11 @@ export default function App() {
   const recognitionRef = useRef(null);
   const [speechSupported, setSpeechSupported] = useState(false);
 
+  // Voice Briefing State
+  const [briefingState, setBriefingState] = useState('idle');
+  const briefingAudioRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
   // --- Speech Detection Effect ---
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -166,6 +173,19 @@ export default function App() {
       setAuthLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  // --- Voice Briefing Cleanup ---
+  useEffect(() => {
+    return () => {
+      if (briefingAudioRef.current) {
+        briefingAudioRef.current.pause();
+        if (briefingAudioRef.current.src) {
+          URL.revokeObjectURL(briefingAudioRef.current.src);
+        }
+      }
+      abortControllerRef.current?.abort();
+    };
   }, []);
 
   const handleLogin = async () => {
@@ -416,6 +436,211 @@ export default function App() {
     return { backgroundColor: `hsl(${h}, 75%, ${l_bg}%)`, color: `hsl(${h}, 75%, ${l_text}%)` };
   };
 
+  // --- Voice Briefing Functions ---
+  const getTodayTasks = () => {
+    const now = new Date();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    return tasks
+      .filter((task) => {
+        if (task.completed) return false;
+        if (!task.dueDate) return false;
+        const taskDate = new Date(task.dueDate);
+        return taskDate <= endOfDay;
+      })
+      .sort((a, b) => {
+        const urgencyDiff = (URGENCY_LEVELS[b.urgency] || 0) - (URGENCY_LEVELS[a.urgency] || 0);
+        if (urgencyDiff !== 0) return urgencyDiff;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+  };
+
+  const generateBriefingSummary = async (todayTasks) => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const now = new Date();
+    const timeOfDay =
+      now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening';
+
+    const taskList = todayTasks
+      .map((task, index) => {
+        const dueTime = new Date(task.dueDate).toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+        return `${index + 1}. "${task.title}" (${task.category}, ${
+          task.urgency
+        } priority, due at ${dueTime})${task.notes ? ` - Notes: ${task.notes}` : ''}`;
+      })
+      .join('\n');
+
+    const systemPrompt = `You are a friendly personal assistant giving a brief voice update about today's tasks.
+Current time: ${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+Time of day: ${timeOfDay}
+
+Today's tasks:
+${taskList || 'No tasks scheduled for today.'}
+
+Instructions:
+1. Create a natural, conversational summary (2-4 sentences max)
+2. Start with a brief greeting appropriate for the time of day
+3. Highlight the most urgent/important items first
+4. Mention specific times if relevant
+5. Keep it concise - this will be spoken aloud
+6. Use a warm, helpful tone
+7. If no tasks, give an encouraging message about having a free day
+
+Return ONLY the spoken text, no JSON or formatting.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }],
+        }),
+      }
+    );
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+  };
+
+  const speakWithElevenLabs = async (text, abortSignal) => {
+    const apiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+    const voiceId = import.meta.env.VITE_ELEVENLABS_VOICE_ID;
+
+    if (!apiKey || !voiceId) {
+      throw new Error('ElevenLabs API key or Voice ID not configured');
+    }
+
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+            style: 0.0,
+            use_speaker_boost: true,
+          },
+        }),
+        signal: abortSignal,
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail?.message || `ElevenLabs API error: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+
+    const audioBlob = new Blob(chunks, { type: 'audio/mpeg' });
+    return URL.createObjectURL(audioBlob);
+  };
+
+  const stopBriefing = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    if (briefingAudioRef.current) {
+      briefingAudioRef.current.pause();
+      briefingAudioRef.current.currentTime = 0;
+      if (briefingAudioRef.current.src) {
+        URL.revokeObjectURL(briefingAudioRef.current.src);
+      }
+      briefingAudioRef.current = null;
+    }
+
+    setBriefingState('idle');
+  };
+
+  const handleVoiceBriefing = async () => {
+    if (briefingState === 'playing') {
+      stopBriefing();
+      return;
+    }
+
+    if (briefingState !== 'idle') {
+      stopBriefing();
+      return;
+    }
+
+    const elevenLabsKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+    const voiceId = import.meta.env.VITE_ELEVENLABS_VOICE_ID;
+
+    if (
+      !elevenLabsKey ||
+      !voiceId ||
+      elevenLabsKey === 'your_elevenlabs_api_key_here' ||
+      voiceId === 'your_voice_id_here'
+    ) {
+      toast.error('Voice briefing not configured. Add ElevenLabs API key and Voice ID to .env');
+      return;
+    }
+
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const todayTasks = getTodayTasks();
+
+      setBriefingState('generating');
+      const summary = await generateBriefingSummary(todayTasks);
+
+      if (abortControllerRef.current?.signal.aborted) return;
+
+      setBriefingState('synthesizing');
+      const audioUrl = await speakWithElevenLabs(summary, abortControllerRef.current.signal);
+
+      if (abortControllerRef.current?.signal.aborted) {
+        URL.revokeObjectURL(audioUrl);
+        return;
+      }
+
+      setBriefingState('playing');
+      const audio = new Audio(audioUrl);
+      briefingAudioRef.current = audio;
+
+      audio.onended = () => {
+        setBriefingState('idle');
+        URL.revokeObjectURL(audioUrl);
+        briefingAudioRef.current = null;
+      };
+
+      audio.onerror = () => {
+        toast.error('Failed to play audio');
+        setBriefingState('idle');
+        URL.revokeObjectURL(audioUrl);
+        briefingAudioRef.current = null;
+      };
+
+      await audio.play();
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        setBriefingState('idle');
+        return;
+      }
+      console.error('Voice briefing error:', error);
+      toast.error(error.message || 'Failed to generate voice briefing');
+      setBriefingState('idle');
+    }
+  };
+
   // --- Loading State View ---
   if (authLoading) {
     return (
@@ -501,7 +726,7 @@ export default function App() {
                 src={user.photoURL}
                 alt="Profile"
                 className="w-6 h-6 rounded-full"
-                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
@@ -513,6 +738,34 @@ export default function App() {
                 ? user.displayName.split(' ')[0]
                 : user.email?.split('@')[0] || 'User'}
             </span>
+          </button>
+          <button
+            onClick={handleVoiceBriefing}
+            disabled={briefingState === 'generating' || briefingState === 'synthesizing'}
+            className={`p-2 rounded-full transition-all ${
+              briefingState === 'playing'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 animate-pulse'
+                : briefingState === 'generating' || briefingState === 'synthesizing'
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'
+            }`}
+            title={
+              briefingState === 'idle'
+                ? "Today's briefing"
+                : briefingState === 'generating'
+                  ? 'Generating summary...'
+                  : briefingState === 'synthesizing'
+                    ? 'Creating audio...'
+                    : 'Stop briefing'
+            }
+          >
+            {briefingState === 'generating' || briefingState === 'synthesizing' ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : briefingState === 'playing' ? (
+              <Square size={18} />
+            ) : (
+              <Volume2 size={18} />
+            )}
           </button>
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -971,7 +1224,7 @@ export default function App() {
                   src={user.photoURL}
                   alt="User"
                   className="w-12 h-12 rounded-full border-2 border-indigo-500"
-                  crossOrigin="anonymous"
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xl font-bold border-2 border-indigo-500">
